@@ -23,7 +23,9 @@ pub struct Spin;
 impl RelaxStrategy for Spin {
     #[inline(always)]
     fn relax() {
-        core::hint::spin_loop();
+        // core::hint::spin_loop();
+        #[cfg(target_arch = "x86_64")]
+        unsafe { llvm_asm!("pause" ::: "memory" : "volatile"); };
     }
 }
 
