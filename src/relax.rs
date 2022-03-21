@@ -25,7 +25,7 @@ impl RelaxStrategy for Spin {
     fn relax() {
         // core::hint::spin_loop();
         #[cfg(target_arch = "x86_64")]
-        unsafe { llvm_asm!("pause" ::: "memory" : "volatile"); };
+        unsafe { core::arch::asm!("pause", options(nomem, nostack)); }
     }
 }
 
