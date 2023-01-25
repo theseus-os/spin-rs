@@ -92,6 +92,17 @@ The crate comes with a few feature flags that you may wish to use.
 
 - `std` enables support for thread yielding instead of spinning.
 
+- `portable_atomic` enables usage of the `portable-atomic` crate
+  to support platforms without native atomic operations (Cortex-M0, etc.).
+  The `portable_atomic_unsafe_assume_single_core` cfg flag
+  must also be set by the final binary crate.
+  This can be done by adapting the following snippet to the `.cargo/config` file:
+  ```
+  [target.<target>]
+  rustflags = [ "--cfg", "portable_atomic_unsafe_assume_single_core" ]
+  ```
+  Note that this cfg is unsafe by nature, and enabling it for multicore systems is unsound.
+
 ## Remarks
 
 It is often desirable to have a lock shared between threads. Wrapping the lock in an
@@ -115,6 +126,11 @@ time for your crate's users. You can do this like so:
 [dependencies]
 spin = { version = "x.y", default-features = false, features = [...] }
 ```
+
+## Minimum Safe Rust Version (MSRV)
+
+This crate is guaranteed to compile on a Minimum Safe Rust Version (MSRV) of 1.38.0 and above.
+This version will not be changed without a minor version bump.
 
 ## License
 

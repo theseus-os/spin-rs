@@ -9,14 +9,17 @@ use core::{
     cell::UnsafeCell,
     fmt,
     ops::{Deref, DerefMut},
-    sync::atomic::{AtomicUsize, Ordering},
     marker::PhantomData,
 };
-use crate::{RelaxStrategy, Spin};
+use crate::{
+    atomic::{AtomicUsize, Ordering},
+    RelaxStrategy, Spin
+};
+
 
 /// A spin-based [ticket lock](https://en.wikipedia.org/wiki/Ticket_lock) providing mutually exclusive access to data.
 ///
-/// A ticket lock is analagous to a queue management system for lock requests. When a thread tries to take a lock, it
+/// A ticket lock is analogous to a queue management system for lock requests. When a thread tries to take a lock, it
 /// is assigned a 'ticket'. It then spins until its ticket becomes next in line. When the lock guard is released, the
 /// next ticket will be processed.
 ///
@@ -84,8 +87,8 @@ pub struct TicketMutexGuard<'a, T: ?Sized + 'a> {
     data: &'a mut T,
 }
 
-unsafe impl<T: ?Sized + Send> Sync for TicketMutex<T> {}
-unsafe impl<T: ?Sized + Send> Send for TicketMutex<T> {}
+unsafe impl<T: ?Sized + Send, R> Sync for TicketMutex<T, R> {}
+unsafe impl<T: ?Sized + Send, R> Send for TicketMutex<T, R> {}
 
 impl<T, R> TicketMutex<T, R> {
     /// Creates a new [`TicketMutex`] wrapping the supplied data.
@@ -124,6 +127,31 @@ impl<T, R> TicketMutex<T, R> {
     #[inline(always)]
     pub fn into_inner(self) -> T {
         self.data.into_inner()
+    }
+    /// Returns a mutable pointer to the underying data.
+    ///
+    /// This is mostly meant to be used for applications which require manual unlocking, but where
+    /// storing both the lock and the pointer to the inner data gets inefficient.
+    ///
+    /// # Example
+    /// ```
+    /// let lock = spin::mutex::SpinMutex::<_>::new(42);
+    ///
+    /// unsafe {
+    ///     core::mem::forget(lock.lock());
+    ///
+    ///     assert_eq!(lock.as_mut_ptr().read(), 42);
+    ///     lock.as_mut_ptr().write(58);
+    ///
+    ///     lock.force_unlock();
+    /// }
+    ///
+    /// assert_eq!(*lock.lock(), 58);
+    ///
+    /// ```
+    #[inline(always)]
+    pub fn as_mut_ptr(&self) -> *mut T {
+        self.data.get()
     }
 }
 
@@ -415,7 +443,7 @@ mod tests {
         let a = mutex.try_lock();
         assert_eq!(a.as_ref().map(|r| **r), Some(42));
 
-        // Additional lock failes
+        // Additional lock fails
         let b = mutex.try_lock();
         assert!(b.is_none());
 

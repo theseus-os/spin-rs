@@ -7,10 +7,13 @@ use core::{
     cell::UnsafeCell,
     fmt,
     ops::{Deref, DerefMut},
-    sync::atomic::{AtomicBool, Ordering},
     marker::PhantomData,
+    mem::ManuallyDrop,
 };
-use crate::{RelaxStrategy, Spin};
+use crate::{
+    atomic::{AtomicBool, Ordering},
+    RelaxStrategy, Spin
+};
 
 /// A [spin lock](https://en.m.wikipedia.org/wiki/Spinlock) providing mutually exclusive access to data.
 ///
@@ -70,12 +73,12 @@ pub struct SpinMutex<T: ?Sized, R = Spin> {
 /// When the guard falls out of scope it will release the lock.
 pub struct SpinMutexGuard<'a, T: ?Sized + 'a> {
     lock: &'a AtomicBool,
-    data: &'a mut T,
+    data: *mut T,
 }
 
 // Same unsafe impls as `std::sync::Mutex`
-unsafe impl<T: ?Sized + Send> Sync for SpinMutex<T> {}
-unsafe impl<T: ?Sized + Send> Send for SpinMutex<T> {}
+unsafe impl<T: ?Sized + Send, R> Sync for SpinMutex<T, R> {}
+unsafe impl<T: ?Sized + Send, R> Send for SpinMutex<T, R> {}
 
 impl<T, R> SpinMutex<T, R> {
     /// Creates a new [`SpinMutex`] wrapping the supplied data.
@@ -116,6 +119,32 @@ impl<T, R> SpinMutex<T, R> {
         // `self` so there's no need to lock.
         let SpinMutex { data, .. } = self;
         data.into_inner()
+    }
+
+    /// Returns a mutable pointer to the underlying data.
+    ///
+    /// This is mostly meant to be used for applications which require manual unlocking, but where
+    /// storing both the lock and the pointer to the inner data gets inefficient.
+    ///
+    /// # Example
+    /// ```
+    /// let lock = spin::mutex::SpinMutex::<_>::new(42);
+    ///
+    /// unsafe {
+    ///     core::mem::forget(lock.lock());
+    ///
+    ///     assert_eq!(lock.as_mut_ptr().read(), 42);
+    ///     lock.as_mut_ptr().write(58);
+    ///
+    ///     lock.force_unlock();
+    /// }
+    ///
+    /// assert_eq!(*lock.lock(), 58);
+    ///
+    /// ```
+    #[inline(always)]
+    pub fn as_mut_ptr(&self) -> *mut T {
+        self.data.get()
     }
 }
 
@@ -263,9 +292,10 @@ impl<'a, T: ?Sized> SpinMutexGuard<'a, T> {
     /// ```
     #[inline(always)]
     pub fn leak(this: Self) -> &'a mut T {
-        let data = this.data as *mut _; // Keep it in pointer form temporarily to avoid double-aliasing
-        core::mem::forget(this);
-        unsafe { &mut *data }
+        // Use ManuallyDrop to avoid stacked-borrow invalidation
+        let mut this = ManuallyDrop::new(this);
+        // We know statically that only we are referencing data
+        unsafe { &mut *this.data }
     }
 }
 
@@ -284,13 +314,15 @@ impl<'a, T: ?Sized + fmt::Display> fmt::Display for SpinMutexGuard<'a, T> {
 impl<'a, T: ?Sized> Deref for SpinMutexGuard<'a, T> {
     type Target = T;
     fn deref(&self) -> &T {
-        self.data
+        // We know statically that only we are referencing data
+        unsafe { &*self.data }
     }
 }
 
 impl<'a, T: ?Sized> DerefMut for SpinMutexGuard<'a, T> {
     fn deref_mut(&mut self) -> &mut T {
-        self.data
+        // We know statically that only we are referencing data
+        unsafe { &mut *self.data }
     }
 }
 
@@ -392,7 +424,7 @@ mod tests {
         let a = mutex.try_lock();
         assert_eq!(a.as_ref().map(|r| **r), Some(42));
 
-        // Additional lock failes
+        // Additional lock fails
         let b = mutex.try_lock();
         assert!(b.is_none());
 
