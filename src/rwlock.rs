@@ -494,6 +494,19 @@ impl<'rwlock, T: ?Sized> RwLockReadGuard<'rwlock, T> {
         // Safety: We know statically that only we are referencing data
         unsafe { &*this.data }
     }
+
+    /// Releases the lock guard.
+    ///
+    /// This is identical to drop except it returns the number of readers left after the guard is
+    /// dropped.
+    #[inline]
+    pub fn release(self) -> usize {
+        debug_assert!(self.lock.load(Ordering::Relaxed) & !(WRITER | UPGRADED) > 0);
+        let result = self.lock.fetch_sub(READER, Ordering::Release);
+        core::mem::forget(self);
+        debug_assert_eq!(result % READER, 0);
+        (result / READER) - 1
+    }
 }
 
 impl<'rwlock, T: ?Sized + fmt::Debug> fmt::Debug for RwLockReadGuard<'rwlock, T> {
@@ -1100,6 +1113,19 @@ mod tests {
         let m = RwLock::new(0);
         ::std::mem::forget(m.write());
         assert!(m.try_read().is_none());
+    }
+
+    #[test]
+    fn test_rw_release() {
+        let lock = RwLock::new(0);
+
+        let read_guard_1 = lock.read();
+        let read_guard_2 = lock.read();
+
+        assert_eq!(read_guard_1.release(), 1);
+        assert!(lock.try_write().is_none());
+        assert_eq!(read_guard_2.release(), 0);
+        assert!(lock.try_write().is_some());
     }
 
     #[test]
