@@ -9,6 +9,8 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+permissions: read-all
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -18,7 +20,7 @@ jobs:
         rust: [stable, beta, nightly]
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - name: Install Rust
       run: rustup update ${{ matrix.rust }} && rustup default ${{ matrix.rust }}
     - name: Run Tests
@@ -32,22 +34,22 @@ jobs:
     - run: rustup target add thumbv7m-none-eabi
     - name: Ensure we don't depend on libstd
       run: cargo hack build --target thumbv7m-none-eabi --no-dev-deps --no-default-features
-  
+
   msrv:
     runs-on: ubuntu-latest
     strategy:
       matrix:
         version: [1.38.0]
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - name: Install Rust
       run: rustup update ${{ matrix.version }} && rustup default ${{ matrix.version }}
-    - run: cargo build --all --all-features --all-targets
+    - run: cargo check --all --all-features
 
   miri:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - name: Install Rust
       run: rustup toolchain install nightly --component miri && rustup default nightly
     - run: cargo miri test
