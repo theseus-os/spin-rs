@@ -323,6 +323,16 @@ impl<T: ?Sized, R> RwLock<T, R> {
         state / READER + (state & UPGRADED) / UPGRADED
     }
 
+    /// Return the number of readers that currently hold the lock (including upgradable readers).
+    ///
+    /// # Safety
+    ///
+    /// This function loads the reader count using an acquire ordering.
+    pub fn reader_count_acquire(&self) -> usize {
+        let state = self.lock.load(Ordering::Acquire);
+        state / READER + (state & UPGRADED) / UPGRADED
+    }
+
     /// Return the number of writers that currently hold the lock.
     ///
     /// Because [`RwLock`] guarantees exclusive mutable access, this function may only return either `0` or `1`.
@@ -333,6 +343,17 @@ impl<T: ?Sized, R> RwLock<T, R> {
     /// the instant it is called. Do not use it for synchronization purposes. However, it may be useful as a heuristic.
     pub fn writer_count(&self) -> usize {
         (self.lock.load(Ordering::Relaxed) & WRITER) / WRITER
+    }
+
+    /// Return the number of writers that currently hold the lock.
+    ///
+    /// Because [`RwLock`] guarantees exclusive mutable access, this function may only return either `0` or `1`.
+    ///
+    /// # Safety
+    ///
+    /// This function loads the writer count using an acquire ordering.
+    pub fn writer_count_acquire(&self) -> usize {
+        (self.lock.load(Ordering::Acquire) & WRITER) / WRITER
     }
 
     /// Force decrement the reader count.

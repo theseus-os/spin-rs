@@ -46,7 +46,7 @@ compile_error!("The `mutex` feature flag was used (perhaps through another featu
 #[cfg(all(not(feature = "use_ticket_mutex"), feature = "spin_mutex"))]
 type InnerMutex<T, R> = self::spin::SpinMutex<T, R>;
 #[cfg(all(not(feature = "use_ticket_mutex"), feature = "spin_mutex"))]
-type InnerMutexGuard<'a, T> = self::spin::SpinMutexGuard<'a, T>;
+type InnerMutexGuard<'a, T, R> = self::spin::SpinMutexGuard<'a, T, R>;
 
 #[cfg(feature = "use_ticket_mutex")]
 type InnerMutex<T, R> = self::ticket::TicketMutex<T, R>;
@@ -124,8 +124,8 @@ unsafe impl<T: ?Sized + Send, R> Send for Mutex<T, R> {}
 ///
 /// [`TicketMutexGuard`]: ./struct.TicketMutexGuard.html
 /// [`SpinMutexGuard`]: ./struct.SpinMutexGuard.html
-pub struct MutexGuard<'a, T: 'a + ?Sized> {
-    inner: InnerMutexGuard<'a, T>,
+pub struct MutexGuard<'a, T: 'a + ?Sized, R> {
+    inner: InnerMutexGuard<'a, T, R>,
 }
 
 impl<T, R> Mutex<T, R> {
@@ -181,7 +181,7 @@ impl<T: ?Sized, R: RelaxStrategy> Mutex<T, R> {
     /// }
     /// ```
     #[inline(always)]
-    pub fn lock(&self) -> MutexGuard<T> {
+    pub fn lock(&self) -> MutexGuard<T, R> {
         MutexGuard {
             inner: self.inner.lock(),
         }
@@ -227,7 +227,7 @@ impl<T: ?Sized, R> Mutex<T, R> {
     /// assert!(maybe_guard2.is_none());
     /// ```
     #[inline(always)]
-    pub fn try_lock(&self) -> Option<MutexGuard<T>> {
+    pub fn try_lock(&self) -> Option<MutexGuard<T, R>> {
         self.inner
             .try_lock()
             .map(|guard| MutexGuard { inner: guard })
@@ -270,7 +270,7 @@ impl<T, R> From<T> for Mutex<T, R> {
     }
 }
 
-impl<'a, T: ?Sized> MutexGuard<'a, T> {
+impl<'a, T: ?Sized, R> MutexGuard<'a, T, R> {
     /// Leak the lock guard, yielding a mutable reference to the underlying data.
     ///
     /// Note that this function will permanently lock the original [`Mutex`].
@@ -287,28 +287,33 @@ impl<'a, T: ?Sized> MutexGuard<'a, T> {
     pub fn leak(this: Self) -> &'a mut T {
         InnerMutexGuard::leak(this.inner)
     }
+
+    /// Returns the mutex associated with the guard.
+    pub fn mutex(&self) -> &SpinMutex<T, R> {
+        InnerMutexGuard::mutex(&self.inner)
+    }
 }
 
-impl<'a, T: ?Sized + fmt::Debug> fmt::Debug for MutexGuard<'a, T> {
+impl<'a, T: ?Sized + fmt::Debug, R> fmt::Debug for MutexGuard<'a, T, R> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Debug::fmt(&**self, f)
     }
 }
 
-impl<'a, T: ?Sized + fmt::Display> fmt::Display for MutexGuard<'a, T> {
+impl<'a, T: ?Sized + fmt::Display, R> fmt::Display for MutexGuard<'a, T, R> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Display::fmt(&**self, f)
     }
 }
 
-impl<'a, T: ?Sized> Deref for MutexGuard<'a, T> {
+impl<'a, T: ?Sized, R> Deref for MutexGuard<'a, T, R> {
     type Target = T;
     fn deref(&self) -> &T {
         &*self.inner
     }
 }
 
-impl<'a, T: ?Sized> DerefMut for MutexGuard<'a, T> {
+impl<'a, T: ?Sized, R> DerefMut for MutexGuard<'a, T, R> {
     fn deref_mut(&mut self) -> &mut T {
         &mut *self.inner
     }
