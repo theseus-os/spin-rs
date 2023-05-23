@@ -201,6 +201,17 @@ impl<T: ?Sized, R> SpinMutex<T, R> {
         self.lock.load(Ordering::Relaxed)
     }
 
+    /// Returns `true` if the lock is currently held.
+    ///
+    /// # Safety
+    ///
+    /// This function checks whether the mutex is locked using an acquire
+    /// ordering.
+    #[inline(always)]
+    pub fn is_locked_acquire(&self) -> bool {
+        self.lock.load(Ordering::Relaxed)
+    }
+
     /// Force unlock this [`SpinMutex`].
     ///
     /// # Safety
