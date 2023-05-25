@@ -209,7 +209,7 @@ impl<T: ?Sized, R> SpinMutex<T, R> {
     /// ordering.
     #[inline(always)]
     pub fn is_locked_acquire(&self) -> bool {
-        self.lock.load(Ordering::Relaxed)
+        self.lock.load(Ordering::Acquire)
     }
 
     /// Force unlock this [`SpinMutex`].
